@@ -69,20 +69,13 @@ class Model(object):
         self._input_word = tf.reshape(self._input_word, [batch_size, -1])
         self._mask = tf.reshape(self._mask, [batch_size, -1])
 
-        # single_cell = rnn_cell.LSTMCell(num_units=size, state_is_tuple=False)
-        # if is_training and config.keep_prob < 1:
-        #     single_cell = rnn_cell.DropoutWrapper(cell=single_cell, input_keep_prob=config.keep_prob)
-
         def single_cell_fn(unit_type, num_units, dropout, mode, forget_bias=1.0):
             """Create an instance of a single RNN cell."""
 
             dropout = dropout if mode == True else 0.0
 
-            # Cell Type
             if unit_type == "lstm":
                 single_cell = rnn_cell.LSTMCell(num_units, forget_bias=forget_bias, state_is_tuple=False)
-            # elif unit_type == "gru":
-            #     single_cell = rnn_cell.GRUCell(num_units)
             else:
                 raise ValueError("Unknown unit type %s!" % unit_type)
 
