@@ -50,7 +50,6 @@ def Read_WordVec():
             save_pickle(word_vec, config.word_vec_path)
             save_pickle(word_voc, config.word_voc_path)
     else:
-
         word_vec = load_pickle(config.word_vec_path)
         word_voc = load_pickle(config.word_voc_path)
 
@@ -58,8 +57,8 @@ def Read_WordVec():
 
 
 def Read_Data():
-    trainingdata = []
-    if not os.path.exists(config.trainingData_pickle):
+    train = []
+    if not os.path.exists(config.trainData_pickle):
         with open(config.trainingData_path, 'r', encoding="utf-8") as ftext:
             for line in ftext:
                 tmp = line.split()
@@ -67,11 +66,18 @@ def Read_Data():
                 doc = tmp[:idx]
                 keywords = tmp[idx+1:]
                 assert len(keywords) == 5
-                trainingdata.append((doc, keywords))
-            save_pickle(trainingdata, config.trainingData_pickle)
+                train.append((doc, keywords))
+            save_pickle(train, config.trainData_pickle)
     else:
-        trainingdata = load_pickle(config.trainingData_pickle)
-    return trainingdata
+        train = load_pickle(config.trainData_pickle)
+
+    # 统计一下 语料中 doc 的平均长度  composition 是 65
+    len_doc = []
+    for doc, topic in train:
+        len_doc.append(len(doc))
+    ave_len  = sum(len_doc)/len(len_doc)
+    print("语料中 doc 的平均长度:{}".format(ave_len))
+    return train
 
 
 print('loading the training data...')
@@ -85,11 +91,11 @@ data_size, _vocab_size = len(data), len(vocab)
 print('data has %d document, size of word vocabulary: %d.' % (data_size, _vocab_size))
 
 
-def data_iterator(trainingdata, batch_size, num_steps):
-    epoch_size = len(trainingdata) // batch_size
+def data_iterator(train_data, batch_size, num_steps):
+    epoch_size = len(train_data) // batch_size
     print("epoch_size:{}".format(epoch_size))
-    for i in tqdm(range(epoch_size)):
-        batch_data = trainingdata[i * batch_size : (i+1) * batch_size]
+    for i in range(epoch_size):
+        batch_data = train_data[i * batch_size : (i+1) * batch_size]
         data_x = np.zeros((batch_size, num_steps), dtype=np.int64)
         data_y = np.zeros((batch_size, num_steps), dtype=np.int64)
         key_words = []
@@ -120,34 +126,41 @@ def data_iterator(trainingdata, batch_size, num_steps):
         mask = np.float32(data_x != 0)
         yield (data_x, data_y, mask, key_words)
             
-            
-train_data = data
-writer = tf.python_io.TFRecordWriter(config.writer_path)
-dataLS = []
-iterator = data_iterator(train_data, config.batch_size, config.num_steps)
+if not os.path.exists(config.writer_path):
+    train_data = data
+    writer = tf.python_io.TFRecordWriter(config.writer_path)
+    iterator = data_iterator(train_data, config.batch_size, config.num_steps)
 
-step = 0
-for x, y, mask, key_words in tqdm(iterator):
-    example = tf.train.Example(
-        # Example contains a Features proto object
-        features=tf.train.Features(
-          # Features contains a map of string to Feature proto objects
-          feature={
-            # A Feature contains one of either a int64_list,
-            # float_list, or bytes_list
-            'input_data': tf.train.Feature(
-                int64_list=tf.train.Int64List(value=x.reshape(-1).astype("int64"))),
-            'target': tf.train.Feature(
-                int64_list=tf.train.Int64List(value=y.reshape(-1).astype("int64"))),
-            'mask': tf.train.Feature(
-                float_list=tf.train.FloatList(value=mask.reshape(-1).astype("float"))),
-            'key_words': tf.train.Feature(
-                int64_list=tf.train.Int64List(value=key_words.reshape(-1).astype("int64")))
-          }))
-    # use the proto object to serialize the example to a string
-    serialized = example.SerializeToString()
-    # write the serialized object to disk
-    writer.write(serialized)
-    step += 1
-    
-print('total step: ', step)
+    step = 0
+    for x, y, mask, key_words in tqdm(iterator):
+        example = tf.train.Example(
+            # Example contains a Features proto object
+            features=tf.train.Features(
+              # Features contains a map of string to Feature proto objects
+              feature={
+                # A Feature contains one of either a int64_list, float_list, or bytes_list
+                'input_data': tf.train.Feature(
+                    int64_list=tf.train.Int64List(value=x.reshape(-1).astype("int64"))),
+                'target': tf.train.Feature(
+                    int64_list=tf.train.Int64List(value=y.reshape(-1).astype("int64"))),
+                'mask': tf.train.Feature(
+                    float_list=tf.train.FloatList(value=mask.reshape(-1).astype("float"))),
+                'key_words': tf.train.Feature(
+                    int64_list=tf.train.Int64List(value=key_words.reshape(-1).astype("int64")))
+              }))
+        # use the proto object to serialize the example to a string
+        serialized = example.SerializeToString()
+        # write the serialized object to disk
+        writer.write(serialized)
+        step += 1
+
+    print('total step: ', step)
+
+
+"""
+loading the training data...
+data has 494944 document, size of word vocabulary: 82461.
+0it [00:00, ?it/s]epoch_size:15467
+15467it [00:58, 265.64it/s]
+total step:  15467
+"""
